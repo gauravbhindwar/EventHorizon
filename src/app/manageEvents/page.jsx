@@ -15,15 +15,23 @@ import {
   Button,
   Card,
   CardContent,
+  Fab,
+  Tooltip,
+  Snackbar,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
-import { Edit, Delete } from "@mui/icons-material";
+import { Edit, Delete, Add, AlarmOn, AlarmOff } from "@mui/icons-material";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { format } from "date-fns"; // for date formatting
+import { format } from "date-fns";
 
 export default function ManageEvents() {
   const [events, setEvents] = useState([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true); // Loader state
+  const [snackbarOpen, setSnackbarOpen] = useState(false); // Snackbar visibility
+  const [snackbarMessage, setSnackbarMessage] = useState(""); // Snackbar message
   const [currentEvent, setCurrentEvent] = useState({
     title: "",
     description: "",
@@ -35,10 +43,14 @@ export default function ManageEvents() {
     // Fetch events when the component mounts
     axios
       .get("/api/events")
-      .then((response) => setEvents(response.data))
+      .then((response) => {
+        setEvents(response.data);
+        setLoading(false); // Stop loader after fetching
+      })
       .catch((error) => {
         console.error("Error fetching events:", error);
         alert("Failed to fetch events. Please try again later.");
+        setLoading(false); // Stop loader on error
       });
   }, []);
 
@@ -59,40 +71,55 @@ export default function ManageEvents() {
     setOpen(false);
   };
 
-const handleSave = async () => {
-  try {
-    const eventData = {
-      title: currentEvent.title,
-      description: currentEvent.description,
-      date: currentEvent.date.toISOString(),
-      reminder: currentEvent.reminder,
-      userId: sessionStorage.userId, // Ensure userId is included
-    };
+  const handleSave = async () => {
+    try {
+      const eventData = {
+        title: currentEvent.title,
+        description: currentEvent.description,
+        date: currentEvent.date.toISOString(),
+        reminder: currentEvent.reminder,
+      };
 
-    let response;
-    if (currentEvent.id) {
-      // Update existing event
-      response = await axios.put(`/api/events/${currentEvent.id}`, eventData);
-      setEvents((prev) =>
-        prev.map((evt) => (evt.id === currentEvent.id ? response.data : evt))
-      );
-    } else {
-      // Create new event
-      response = await axios.post("/api/events", eventData);
-      setEvents((prev) => [...prev, response.data]);
+      let response;
+      if (currentEvent.id) {
+        // Update existing event
+        response = await axios.put(`/api/events/${currentEvent.id}`, eventData);
+        setEvents((prev) =>
+          prev.map((evt) => (evt.id === currentEvent.id ? response.data : evt))
+        );
+        setSnackbarMessage("Event updated successfully!");
+      } else {
+        // Create new event
+        response = await axios.post("/api/events", eventData);
+        setEvents((prev) => [...prev, response.data]);
+        setSnackbarMessage("Event added successfully!");
+      }
+      handleClose();
+    } catch (error) {
+      console.error("Error saving event:", error);
+      alert("An error occurred while saving the event. Please try again.");
+    } finally {
+      setSnackbarOpen(true); // Show the Snackbar for success message
     }
-  } catch (error) {
-    console.error("Error saving event:", error);
-    alert("An error occurred while saving the event. Please try again.");
-  }
-};
+  };
+
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`/api/events/${id}`);
-      setEvents((prev) => prev.filter((event) => event.id !== id));
+      const response = await axios.delete(`/api/events/${id}`, {
+        data: { id },
+      });
+      if (response.status === 200) {
+        setEvents((prev) => prev.filter((event) => event.id !== id));
+        setSnackbarMessage("Event deleted successfully!");
+      } else {
+        console.error("Failed to delete event:", response.statusText);
+        alert("Failed to delete event. Please try again.");
+      }
     } catch (error) {
       console.error("Error deleting event:", error);
       alert("Failed to delete event. Please try again.");
+    } finally {
+      setSnackbarOpen(true); // Show Snackbar after deletion
     }
   };
 
@@ -103,9 +130,14 @@ const handleSave = async () => {
       setEvents((prev) =>
         prev.map((evt) => (evt.id === event.id ? updatedEvent : evt))
       );
+      setSnackbarMessage(
+        `Reminder ${updatedEvent.reminder ? "enabled" : "disabled"}!`
+      );
     } catch (error) {
       console.error("Error toggling reminder:", error);
       alert("Failed to update reminder. Please try again.");
+    } finally {
+      setSnackbarOpen(true); // Show Snackbar after toggling reminder
     }
   };
 
@@ -115,53 +147,75 @@ const handleSave = async () => {
         <Typography variant="h4" gutterBottom>
           Manage Your Events
         </Typography>
-        <Box mt={4}>
-          <Card onClick={() => handleOpen()} sx={{ cursor: "pointer" }}>
-            <CardContent>
-              <Typography variant="h5" component="div">
-                Add New Event
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Click here to add a new event.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Box>
+
+        {/* Add Event Button */}
+        <Tooltip title="Add Event" arrow>
+          <Fab
+            color="primary"
+            aria-label="add"
+            onClick={() => handleOpen()}
+            sx={{ position: "fixed", bottom: 20, right: 20 }}>
+            <Add />
+          </Fab>
+        </Tooltip>
+
+        {/* Event List */}
         <Box mt={4}>
           <Typography variant="h5" gutterBottom>
             Your Events
           </Typography>
-          <List>
-            {events.length === 0 ? (
-              <Typography variant="body1">No events available.</Typography>
-            ) : (
-              events.map((event) => (
+          {loading ? (
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                height: "50vh",
+              }}>
+              <CircularProgress /> {/* Loader Spinner */}
+            </Box>
+          ) : events.length === 0 ? (
+            <Typography variant="body1">No events available.</Typography>
+          ) : (
+            <List>
+              {events.map((event) => (
                 <ListItem key={event.id} button>
                   <ListItemText
                     primary={event.title}
-                    secondary={format(new Date(event.date), "PPPP")} // format the date
+                    secondary={format(new Date(event.date), "PPPP")}
                   />
                   <Box display="flex" alignItems="center">
-                    <IconButton edge="end" onClick={() => handleOpen(event)}>
-                      <Edit />
-                    </IconButton>
-                    <IconButton
-                      edge="end"
-                      onClick={() => handleDelete(event.id)}>
-                      <Delete />
-                    </IconButton>
-                    <Checkbox
-                      edge="end"
-                      checked={event.reminder}
-                      onChange={() => toggleReminder(event)}
-                    />
+                    {/* Edit Button */}
+                    <Tooltip title="Edit Event">
+                      <IconButton edge="end" onClick={() => handleOpen(event)}>
+                        <Edit />
+                      </IconButton>
+                    </Tooltip>
+                    {/* Delete Button */}
+                    <Tooltip title="Delete Event">
+                      <IconButton
+                        edge="end"
+                        onClick={() => handleDelete(event.id)}>
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
+                    {/* Reminder Toggle */}
+                    <Tooltip title="Toggle Reminder">
+                      <IconButton
+                        edge="end"
+                        onClick={() => toggleReminder(event)}>
+                        {event.reminder ? <AlarmOn /> : <AlarmOff />}
+                      </IconButton>
+                    </Tooltip>
                   </Box>
                 </ListItem>
-              ))
-            )}
-          </List>
+              ))}
+            </List>
+          )}
         </Box>
       </Box>
+
+      {/* Modal for Adding/Editing Events */}
       <Modal open={open} onClose={handleClose}>
         <Box
           sx={{
@@ -177,6 +231,7 @@ const handleSave = async () => {
           <Typography variant="h6" component="h2">
             {currentEvent.id ? "Edit Event" : "Create Event"}
           </Typography>
+
           <TextField
             fullWidth
             label="Title"
@@ -226,6 +281,19 @@ const handleSave = async () => {
           </Box>
         </Box>
       </Modal>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}>
+        <Alert
+          onClose={() => setSnackbarOpen(false)}
+          severity="success"
+          sx={{ width: "100%" }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

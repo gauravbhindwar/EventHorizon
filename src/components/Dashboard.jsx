@@ -1,8 +1,7 @@
 "use client";
 
 import { signIn, signOut, useSession } from "next-auth/react";
-import Image from "next/image";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import {
   AppBar,
@@ -14,29 +13,66 @@ import {
   Modal,
   TextField,
   IconButton,
-  List,
-  ListItem,
-  ListItemText,
   Checkbox,
+  List,
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Paper,
+  Fab,
+  FormControlLabel,
   Card,
   CardContent,
+  CardActions,
+  Avatar,
+  Divider,
+  Snackbar,
+  CircularProgress,
+  Alert,
 } from "@mui/material";
-import { Add, Edit, Delete } from "@mui/icons-material";
+import { Add, DarkMode, LightMode, Delete } from "@mui/icons-material";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { Calendar, momentLocalizer } from "react-big-calendar";
+import moment from "moment";
+import "react-big-calendar/lib/css/react-big-calendar.css";
 import { useRouter } from "next/navigation";
+
+const localizer = momentLocalizer(moment);
 
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const [events, setEvents] = useState([]);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true); // Loading state for data fetching
+  const [snackbarMessage, setSnackbarMessage] = useState(""); // Message for the Snackbar
+  const [snackbarOpen, setSnackbarOpen] = useState(false); // Control the Snackbar visibility
   const [currentEvent, setCurrentEvent] = useState({
     title: "",
     description: "",
     date: new Date(),
     reminder: false,
   });
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [dateEventsOpen, setDateEventsOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
   const router = useRouter();
+
+  const theme = createTheme({
+    palette: {
+      mode: darkMode ? "dark" : "light",
+      primary: {
+        main: darkMode ? "#90caf9" : "#3f51b5",
+      },
+      secondary: {
+        main: "#f48fb1",
+      },
+      background: {
+        default: darkMode ? "#121212" : "#ffffff",
+      },
+    },
+  });
 
   useEffect(() => {
     const fetchEvents = async () => {
@@ -46,13 +82,21 @@ export default function Dashboard() {
             Authorization: `Bearer ${session.accessToken}`,
           },
         });
-        setEvents(response.data);
+        setEvents(
+          response.data.map((event) => ({
+            ...event,
+            start: new Date(event.date),
+            end: new Date(event.date),
+          }))
+        );
       } catch (error) {
         if (error.response && error.response.status === 401) {
           console.error("Unauthorized: Please sign in.");
         } else {
           console.error("Error fetching events:", error);
         }
+      } finally {
+        setLoading(false); // Stop the loading spinner once data is fetched
       }
     };
 
@@ -80,9 +124,9 @@ export default function Dashboard() {
 
   const handleSave = async () => {
     try {
+      let response;
       if (currentEvent.id) {
-        // Update existing event
-        const response = await axios.put(
+        response = await axios.put(
           `/api/events/${currentEvent.id}`,
           currentEvent,
           {
@@ -94,34 +138,76 @@ export default function Dashboard() {
         setEvents((prev) =>
           prev.map((evt) => (evt.id === currentEvent.id ? response.data : evt))
         );
+        setSnackbarMessage("Event updated successfully!"); // Snackbar message for update
       } else {
-        // Create new event
-        const response = await axios.post("/api/events", currentEvent, {
+        response = await axios.post("/api/events", currentEvent, {
           headers: {
             Authorization: `Bearer ${session.accessToken}`,
           },
         });
         setEvents((prev) => [...prev, response.data]);
+        setSnackbarMessage("Event added successfully!"); // Snackbar message for add
       }
       handleClose();
     } catch (error) {
       console.error("Error saving event:", error);
       alert("Failed to save event. Please try again.");
+    } finally {
+      setSnackbarOpen(true); // Show Snackbar after saving
     }
   };
 
   const handleDelete = async (id) => {
     try {
-      await axios.delete(`/api/events/${id}`, {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-        },
+      const response = await axios.delete(`/api/events/${id}`, {
+        data: { id },
       });
-      setEvents((prev) => prev.filter((event) => event.id !== id));
+      if (response.status === 200) {
+        setEvents((prev) => prev.filter((event) => event.id !== id));
+        setSnackbarMessage("Event deleted successfully!"); // Snackbar message for delete
+      } else {
+        console.error("Failed to delete event:", response.statusText);
+        alert("Failed to delete event. Please try again.");
+      }
     } catch (error) {
       console.error("Error deleting event:", error);
       alert("Failed to delete event. Please try again.");
+    } finally {
+      setSnackbarOpen(true); // Show Snackbar after deleting
     }
+  };
+
+  const handleSelectEvent = (event) => {
+    setCurrentEvent(event);
+    handleOpen(event);
+  };
+
+  const handleSelectSlot = ({ start }) => {
+    setSelectedDate(start);
+    setDateEventsOpen(true);
+  };
+
+  const eventsForDate = useMemo(() => {
+    if (!selectedDate) return [];
+    return events.filter(
+      (event) =>
+        moment(event.start).format("YYYY-MM-DD") ===
+        moment(selectedDate).format("YYYY-MM-DD")
+    );
+  }, [selectedDate, events]);
+
+  const eventStyleGetter = () => {
+    return {
+      style: {
+        backgroundColor: theme.palette.primary.main,
+        borderRadius: "5px",
+        opacity: 0.9,
+        color: "white",
+        padding: "3px",
+        border: "0px",
+        display: "block",
+      },
+    };
   };
 
   if (status === "loading") {
@@ -129,176 +215,233 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Calendar App
-          </Typography>
-          {session ? (
-            <>
-              <IconButton color="inherit" onClick={() => handleOpen()}>
-                ADD EVENT
-                <Add />
-              </IconButton>
-              <div className="relative h-10 w-10">
-                <Image
-                  className="rounded-full"
-                  src={session.user.image}
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <div className="min-h-screen">
+        <AppBar position="static" color="primary">
+          <Toolbar>
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              Event Horizon
+            </Typography>
+            {session ? (
+              <>
+                <Button
+                  color="inherit"
+                  sx={{ mr: 2 }}
+                  onClick={() => router.push("/manageEvents")}>
+                  Manage Events
+                </Button>
+                <Avatar
                   alt={session.user.name}
-                  layout="fill"
-                  objectFit="cover"
+                  src={session.user.image}
+                  sx={{ width: 48, height: 48, mr: 2 }}
                 />
-              </div>
-              <Typography variant="body1" className="ml-4">
-                {session.user.name}
-              </Typography>
-              <Button color="inherit" onClick={() => signOut()}>
-                Sign out
-              </Button>
-            </>
-          ) : (
-            <Button color="inherit" onClick={() => signIn("github")}>
-              Sign in with GitHub
-            </Button>
-          )}
-        </Toolbar>
-      </AppBar>
-      <Container>
-        <Box mt={4}>
-          <Typography variant="h4" gutterBottom>
-            Welcome, {session?.user?.name || "to Calendar App"}
-          </Typography>
-          <Typography variant="body1" gutterBottom>
-            You are signed in as {session?.user?.email}.
-          </Typography>
-          {session && (
-            <>
-              <Box mt={4}>
-                <Card
-                  onClick={() => router.push("/manageEvents")}
-                  sx={{ cursor: "pointer" }}>
-                  <CardContent>
-                    <Typography variant="h5" component="div">
-                      Manage Events
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Click here to manage your events.
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Box>
-              <Box mt={4}>
-                <Typography variant="h5" gutterBottom>
-                  Your Events
+                <Typography
+                  variant="body1"
+                  className="sm:block hidden"
+                  sx={{ mr: 2 }}>
+                  {session.user.name}
                 </Typography>
-                <List>
-                  {events.map((event) => (
-                    <ListItem
-                      key={event.id}
-                      button
-                      onClick={() => handleOpen(event)}>
-                      <ListItemText
-                        primary={event.title}
-                        secondary={new Date(event.date).toDateString()}
-                      />
-                      <Box display="flex" alignItems="center">
-                        <IconButton
-                          edge="end"
-                          onClick={() => handleOpen(event)}>
-                          <Edit />
-                        </IconButton>
-                        <Checkbox
-                          edge="end"
-                          checked={event.reminder}
-                          onChange={() =>
-                            setEvents((prev) =>
-                              prev.map((evt) =>
-                                evt.id === event.id
-                                  ? { ...evt, reminder: !evt.reminder }
-                                  : evt
-                              )
-                            )
-                          }
-                        />
-                        <IconButton
-                          edge="end"
-                          onClick={() => handleDelete(event.id)}>
-                          <Delete />
-                        </IconButton>
-                      </Box>
-                    </ListItem>
-                  ))}
-                </List>
+                <Button color="inherit" onClick={() => signOut()}>
+                  Sign out
+                </Button>
+              </>
+            ) : (
+              <Button color="inherit" onClick={() => signIn("github")}>
+                Sign in with GitHub
+              </Button>
+            )}
+            <IconButton color="inherit" onClick={() => setDarkMode(!darkMode)}>
+              {darkMode ? <LightMode /> : <DarkMode />}
+            </IconButton>
+          </Toolbar>
+        </AppBar>
+        <Container maxWidth="lg">
+          <Box mt={4}>
+            <Typography variant="h4" gutterBottom>
+              Welcome, {session?.user?.name || "to Calendar App"}
+            </Typography>
+            <Typography variant="body1" gutterBottom>
+              You are signed in as {session?.user?.email}.
+            </Typography>
+            {session && (
+              <Box mt={4}>
+                <Paper elevation={3}>
+                  {loading ? (
+                    <Box
+                      sx={{
+                        display: "flex",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        height: 600,
+                      }}>
+                      <CircularProgress /> {/* Loader spinner */}
+                    </Box>
+                  ) : (
+                    <Calendar
+                      localizer={localizer}
+                      events={events}
+                      startAccessor="start"
+                      endAccessor="end"
+                      style={{ height: 600 }}
+                      onSelectEvent={handleSelectEvent}
+                      onSelectSlot={handleSelectSlot}
+                      selectable
+                      eventPropGetter={eventStyleGetter}
+                    />
+                  )}
+                </Paper>
               </Box>
-            </>
-          )}
-        </Box>
-      </Container>
-      <Modal open={open} onClose={handleClose}>
-        <Box
-          sx={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            width: 400,
-            bgcolor: "background.paper",
-            boxShadow: 24,
-            p: 4,
-          }}>
-          <Typography variant="h6" component="h2">
-            {currentEvent.id ? "Edit Event" : "Create Event"}
-          </Typography>
-          <TextField
-            fullWidth
-            label="Title"
-            margin="normal"
-            value={currentEvent.title}
-            onChange={(e) =>
-              setCurrentEvent({ ...currentEvent, title: e.target.value })
-            }
-          />
-          <TextField
-            fullWidth
-            label="Description"
-            margin="normal"
-            value={currentEvent.description}
-            onChange={(e) =>
-              setCurrentEvent({ ...currentEvent, description: e.target.value })
-            }
-          />
-          <DatePicker
-            selected={currentEvent.date}
-            onChange={(date) =>
-              setCurrentEvent({ ...currentEvent, date: date })
-            }
-            customInput={<TextField fullWidth margin="normal" />}
-          />
-          <Box mt={2}>
-            <Checkbox
-              checked={currentEvent.reminder}
-              onChange={() =>
+            )}
+          </Box>
+        </Container>
+
+        {/* Floating Action Button for Adding Events */}
+        {session && (
+          <Fab
+            color="primary"
+            aria-label="add"
+            onClick={() => handleOpen()}
+            sx={{
+              position: "fixed",
+              bottom: 20,
+              right: 20,
+              width: 65,
+              height: 65,
+            }}>
+            <Add sx={{ fontSize: 30 }} />
+          </Fab>
+        )}
+
+        {/* Event Creation/Edit Modal */}
+        <Modal open={open} onClose={handleClose}>
+          <Paper
+            sx={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: 450,
+              p: 4,
+              borderRadius: "10px",
+            }}>
+            <Typography variant="h6" component="h2">
+              {currentEvent.id ? "Edit Event" : "Add Event"}
+            </Typography>
+            <TextField
+              label="Title"
+              value={currentEvent.title}
+              onChange={(e) =>
+                setCurrentEvent({ ...currentEvent, title: e.target.value })
+              }
+              fullWidth
+              margin="normal"
+            />
+            <TextField
+              label="Description"
+              value={currentEvent.description}
+              onChange={(e) =>
                 setCurrentEvent({
                   ...currentEvent,
-                  reminder: !currentEvent.reminder,
+                  description: e.target.value,
                 })
               }
+              fullWidth
+              margin="normal"
+              multiline
+              rows={4}
             />
-            <Typography variant="body2" component="span">
-              Set Reminder
+            <DatePicker
+              selected={currentEvent.date}
+              onChange={(date) =>
+                setCurrentEvent({ ...currentEvent, date: date })
+              }
+              showTimeSelect
+              dateFormat="Pp"
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={currentEvent.reminder}
+                  onChange={(e) =>
+                    setCurrentEvent({
+                      ...currentEvent,
+                      reminder: e.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Set Reminder"
+            />
+            <Box mt={2} textAlign="right">
+              <Button onClick={handleClose} sx={{ mr: 2 }}>
+                Cancel
+              </Button>
+              <Button variant="contained" onClick={handleSave}>
+                Save
+              </Button>
+            </Box>
+          </Paper>
+        </Modal>
+
+        {/* Date-specific events modal */}
+        <Modal
+          open={dateEventsOpen}
+          onClose={() => setDateEventsOpen(false)}
+          aria-labelledby="date-events-modal">
+          <Paper
+            sx={{
+              position: "absolute",
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: 450,
+              p: 4,
+              borderRadius: "10px",
+            }}>
+            <Typography variant="h6">
+              Events on {moment(selectedDate).format("MMMM Do, YYYY")}
             </Typography>
-          </Box>
-          <Box mt={2} display="flex" justifyContent="flex-end">
-            <Button onClick={handleClose} sx={{ mr: 2 }}>
-              Cancel
-            </Button>
-            <Button variant="contained" onClick={handleSave}>
-              Save
-            </Button>
-          </Box>
-        </Box>
-      </Modal>
-    </div>
+            <Divider sx={{ mb: 2 }} />
+            <List>
+              {eventsForDate.map((event) => (
+                <Card key={event.id} sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6">{event.title}</Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      {event.description}
+                    </Typography>
+                  </CardContent>
+                  <CardActions>
+                    <IconButton
+                      edge="end"
+                      aria-label="delete"
+                      onClick={() => handleDelete(event.id)}>
+                      <Delete />
+                    </IconButton>
+                  </CardActions>
+                </Card>
+              ))}
+            </List>
+            <Box mt={2} textAlign="right">
+              <Button onClick={() => setDateEventsOpen(false)}>Close</Button>
+            </Box>
+          </Paper>
+        </Modal>
+
+        {/* Snackbar for notifications */}
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={3000}
+          onClose={() => setSnackbarOpen(false)}>
+          <Alert
+            onClose={() => setSnackbarOpen(false)}
+            severity="success"
+            sx={{ width: "100%" }}>
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
+      </div>
+    </ThemeProvider>
   );
 }
