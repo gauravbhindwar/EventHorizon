@@ -59,31 +59,33 @@ export default function ManageEvents() {
     setOpen(false);
   };
 
-  const handleSave = async () => {
-    try {
-      if (currentEvent.id) {
-        // Update existing event
-        const updatedEvent = await axios.put(
-          `/api/events/${currentEvent.id}`,
-          currentEvent
-        );
-        setEvents((prev) =>
-          prev.map((evt) =>
-            evt.id === currentEvent.id ? updatedEvent.data : evt
-          )
-        );
-      } else {
-        // Create new event
-        const newEvent = await axios.post("/api/events", currentEvent);
-        setEvents((prev) => [...prev, newEvent.data]);
-      }
-      handleClose();
-    } catch (error) {
-      console.error("Error saving event:", error);
-      alert("Failed to save event. Please try again.");
-    }
-  };
+const handleSave = async () => {
+  try {
+    const eventData = {
+      title: currentEvent.title,
+      description: currentEvent.description,
+      date: currentEvent.date.toISOString(),
+      reminder: currentEvent.reminder,
+      userId: sessionStorage.userId, // Ensure userId is included
+    };
 
+    let response;
+    if (currentEvent.id) {
+      // Update existing event
+      response = await axios.put(`/api/events/${currentEvent.id}`, eventData);
+      setEvents((prev) =>
+        prev.map((evt) => (evt.id === currentEvent.id ? response.data : evt))
+      );
+    } else {
+      // Create new event
+      response = await axios.post("/api/events", eventData);
+      setEvents((prev) => [...prev, response.data]);
+    }
+  } catch (error) {
+    console.error("Error saving event:", error);
+    alert("An error occurred while saving the event. Please try again.");
+  }
+};
   const handleDelete = async (id) => {
     try {
       await axios.delete(`/api/events/${id}`);

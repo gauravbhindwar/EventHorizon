@@ -12,9 +12,12 @@ export const authOptions = {
   ],
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
+  session: {
+    jwt: true,
+  },
   callbacks: {
     async session({ session, user }) {
-      session.user.id = user.id; // Ensure user ID is attached to the session
+      session.user.id = user.id;
       return session;
     },
   },
