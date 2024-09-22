@@ -1,7 +1,7 @@
 ## Getting Started
 
 #Refence Link
-`https://eventhorizon-red.vercel.app/`
+ [https://eventhorizon-red.vercel.app/](https://eventhorizon-red.vercel.app/)
 
 Before executing ```npm run dev ``` command create a ```.env``` and ```.env.local``` file and make sure all data in it is as same as ```.env.sample```
 
