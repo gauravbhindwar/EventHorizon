@@ -27,7 +27,9 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     "src/app/events/page.jsx",
-    "src/components/EventForm.jsx"
+    "src/components/EventForm.jsx",
+    "src/app/api/auth/[...nextauth]/route.js",
+    "src/lib/authOptions.js"
   ],
   "exclude": ["node_modules"]
 }

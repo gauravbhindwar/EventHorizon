@@ -13,8 +13,6 @@ import {
   ListItemText,
   Checkbox,
   Button,
-  Card,
-  CardContent,
   Fab,
   Tooltip,
   Snackbar,
