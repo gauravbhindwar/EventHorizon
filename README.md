@@ -1,9 +1,9 @@
 
 ## Getting Started
 
-modify add a ```bash .env.local ``` file and insure all the details to be corrected as ```bash .env.sample ```
+modify add a ``` .env.local ``` file and insure all the details to be corrected as ``` .env.sample ```
 
-```bash
+```
 NEXTAUTH_SECRET = your-next-auth-secret
 
 NEXTAUTH_URl = your-next-auth-url            //default  -- http://localhost:3000
@@ -25,7 +25,7 @@ EMAIL_PASS=your-email-password         // this is not your email login password
 
 First, run the development server:
 
-```bash
+```
 npm run dev
 # or
 yarn dev
