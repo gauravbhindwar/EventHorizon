@@ -1,13 +1,14 @@
 import { getServerSession } from "next-auth/next";
 import { PrismaClient } from "@prisma/client";
-import { handler } from "@/app/api/auth/[...nextauth]/route";
+// import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/authOptions";
 import { NextResponse } from "next/server";
 
 const prisma = new PrismaClient();
 
 export async function GET(request, context) {
   const { params } = context;
-  const session = await getServerSession(handler);
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
@@ -36,8 +37,61 @@ export async function GET(request, context) {
   }
 }
 
+// export async function PUT(req) {
+//   const session = await getServerSession(authOptions);
+
+//   if (!session || !session.user) {
+//     return NextResponse.json(
+//       { message: "User not authenticated" },
+//       { status: 401 }
+//     );
+//   }
+
+//   const { id, title, description, date, reminder } = await req.json();
+//   const userId = session.user.id;
+
+//   if (!userId) {
+//     return NextResponse.json(
+//       { message: "User ID is required" },
+//       { status: 400 }
+//     );
+//   }
+
+//   try {
+//     const event = await prisma.event.findUnique({
+//       where: { id },
+//     });
+
+//     if (!event) {
+//       return NextResponse.json({ message: "Event not found" }, { status: 404 });
+//     }
+
+//     if (event.userId !== userId) {
+//       return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+//     }
+
+//     const updatedEvent = await prisma.event.update({
+//       where: { id },
+//       data: {
+//         title,
+//         description,
+//         date: new Date(date),
+//         reminder,
+//       },
+//     });
+
+//     return NextResponse.json(updatedEvent);
+//   } catch (error) {
+//     console.error("Error updating event:", error);
+//     return NextResponse.json(
+//       { message: "Internal Server Error" },
+//       { status: 500 }
+//     );
+//   }
+// }
+
 export async function POST(req) {
-  const session = await getServerSession(handler);
+  const session = await getServerSession(authOptions);
 
   if (!session || !session.user) {
     return NextResponse.json(
@@ -77,7 +131,7 @@ export async function POST(req) {
 }
 
 export async function PUT(req) {
-  const session = await getServerSession(handler);
+  const session = await getServerSession(authOptions);
 
   if (!session || !session.user) {
     return NextResponse.json(
@@ -130,7 +184,7 @@ export async function PUT(req) {
 }
 
 export async function DELETE(req) {
-  const session = await getServerSession(handler);
+  const session = await getServerSession(authOptions);
 
   if (!session || !session.user) {
     return NextResponse.json(
